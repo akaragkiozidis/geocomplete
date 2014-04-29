@@ -32,6 +32,8 @@
   // * `markerOptions.disabled` - Do not show marker. Default: `false`. Set to true to disable marker.
   // * `maxZoom` - The maximum zoom level too zoom in after a geocoding response. Default: `16`
   // * `types` - An array containing one or more of the supported types for the places request. Default: `['geocode']` See the full list [here](http://code.google.com/apis/maps/documentation/javascript/places.html#place_search_requests).
+  // * `blur` - Geocode when input loses focus.
+  // * `geocodeAfterBlur` - If blur is set to true, choose whether to geocode if user has explicitly selected a result or just typed a string.
 
   var defaults = {
     bounds: true,
@@ -54,7 +56,8 @@
 
     maxZoom: 16,
     types: ['geocode'],
-    blur: false
+    blur: false,
+    geocodeAfterBlur: false
   };
 
   // See: [Geocoding Types](https://developers.google.com/maps/documentation/geocoding/#Types)
@@ -182,17 +185,33 @@
         if (event.keyCode === 13){ return false; }
       });
 
+      // Assume that if user types anything, selected location is not final.
+      if (this.options.geocodeAfterBlur === true){
+        this.$input.bind('keypress', $.proxy(function(){
+          if (event.keyCode != 9 && this.selected){
+              this.selected = false;
+          }
+        }, this));
+      }
+
       // Listen for "geocode" events and trigger find action.
       this.$input.bind("geocode", $.proxy(function(){
         this.find();
       }, this));
 
-      // Trigger find action when input element is blured out.
-      // (Usefull for typing partial location and tabing to the next field
+      // Trigger find action when input element is blurred out and user has
+      // not explicitly selected a result.
+      // (Useful for typing partial location and tabbing to the next field
       // or clicking somewhere else.)
       if (this.options.blur === true){
         this.$input.blur($.proxy(function(){
-          this.find();
+          if (this.options.geocodeAfterBlur === true){
+            if (!this.selected){
+              this.find();
+            }
+          } else {
+            this.find();
+          }
         }, this));
       }
     },
@@ -330,7 +349,6 @@
     // If the geometry has a viewport, the map zooms out to fit the bounds.
     // Additionally it updates the marker position.
     center: function(geometry){
-
       if (geometry.viewport){
         this.map.fitBounds(geometry.viewport);
         if (this.map.getZoom() > this.options.maxZoom){
@@ -347,7 +365,7 @@
       }
     },
 
-    // Update the elements based on a single places or geoocoding response
+    // Update the elements based on a single places or geocoding response
     // and trigger the "geocode:result" event on the input.
     update: function(result){
 
@@ -446,8 +464,9 @@
     // If the place has no geometry it passes it to the geocoder.
     placeChanged: function(){
       var place = this.autocomplete.getPlace();
+      this.selected = true;
 
-      if (!place || !place.geometry){
+      if (!place.geometry){
         if (this.options.autoselect) {
           // Automatically selects the highlighted item or the first item from the
           // suggestions list.
